@@ -1,6 +1,8 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import moment from 'moment';
 import { debounce } from 'lodash';
+
+import Container from '@mui/material/Container';
 
 import { Col, Drawer, Row, Button, Input, Table, Tooltip } from 'antd';
 const { Search } = Input;
@@ -33,6 +35,9 @@ const columns = [
   },
 ];
 const ListDocuments = ({ visible, onClose, documents = [], onSearch, signedInUser, onSignOut, isLoading }) => {
+  useEffect(() => {
+    console.log(documents)
+  }, [])
   const search = (value) => {
     delayedQuery(`name contains '${value}'`);
   };
@@ -43,6 +48,7 @@ const ListDocuments = ({ visible, onClose, documents = [], onSearch, signedInUse
   );
 
   return (
+    <Container>
     <Drawer
       title="Select Google Drive Document"
       placement="right"
@@ -82,6 +88,7 @@ const ListDocuments = ({ visible, onClose, documents = [], onSearch, signedInUse
         </Col>
       </Row>
     </Drawer>
+    </Container>
   );
 };
 
