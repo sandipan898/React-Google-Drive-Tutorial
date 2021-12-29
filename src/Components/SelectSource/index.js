@@ -10,16 +10,19 @@ import ListDocuments from '../ListDocuments';
 import { style } from './styles';
 import { loadGoogleScript } from '../helper';
 import { getFileInfo } from 'prettier';
+import * as AWS from "aws-sdk";
 
 const NewDocumentWrapper = styled.div`
   ${style}
 `;
 
 // // Client ID and API key from the Developer Console
-const CLIENT_ID = process.env.CLIENT_ID;
-const API_KEY = process.env.API_KEY;
-const appId = process.env.APP_ID;
-
+// const CLIENT_ID = process.env.CLIENT_ID;
+// const API_KEY = process.env.API_KEY;
+// const appId = process.env.APP_ID;
+const CLIENT_ID = "546959051313-8l13pmvrkm4tfv8fcqdghs2uj6a354t5.apps.googleusercontent.com";
+const API_KEY = "AIzaSyD7ySMiIUkaq7MakjjDcbeEVQTF9WEIsbg";
+const appId = "546959051313";
 
 // // Array of API discovery doc URLs for APIs
 const DISCOVERY_DOCS = ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'];
@@ -267,15 +270,18 @@ function App() {
     console.log("authResponse", authResponse);
     if (data) {
       console.log(data)
-      data.docs.map(folder => {
-        console.log(folder);
-        fetchFiles(folder.id)
-      })
-      handleClientLoad()
+      handleClientLoad(data) // needs to complete first / asynchronous
+      
+      // data.docs.forEach(folder => {
+      //   console.log(folder);
+      //   fetchFiles(folder.id) // needs to complete / asynchronous
+      // })
+      // handleSuccess()
+      console.log("handleSuccess", childFiles);
     }
   }, [data]);
 
-  const handleClientLoad = () => {
+  const handleClientLoad = (data) => {
     // handleOpenPicker()
     gapi.load('client:auth2', initClient);
     // gapi.load('picker', onPickerApiLoad);
@@ -283,8 +289,7 @@ function App() {
 
   const initClient = () => {
     // setIsLoadingGoogleDriveApi(true);
-    gapi.client
-      .init({
+    gapi.client.init({
         apiKey: API_KEY,
         clientId: CLIENT_ID,
         discoveryDocs: DISCOVERY_DOCS,
@@ -293,12 +298,17 @@ function App() {
       })
       .then(
         function () {
-          console.log('Fetching documents', gapi);
+          console.log('Fetching documents', gapi, data);
           // Listen for sign-in state changes.
           gapi.auth.setToken(authResponse.access_token)
           gapi.auth2.getAuthInstance().isSignedIn.listen(updateSigninStatus);
           // Handle the initial sign-in state.
           updateSigninStatus(gapi.auth2.getAuthInstance().isSignedIn.get());
+          
+          data.docs.forEach(folder => {
+            console.log(folder);
+            fetchFiles(folder.id) // needs to complete / asynchronous
+          })
         },
         function (error) {
           console.log('error', error);
@@ -344,31 +354,106 @@ function App() {
     })
       .then(res => res.json())
       .then(data => {
-        // console.log(childFiles.length)
-        // if (!childFiles.length) {
-        //   setChildFiles(data);  
-        // } else {
-        //   const filesArr = childFiles;
-        //   filesArr.push(data);
-        //   setChildFiles(filesArr);
-        // }
-        console.log("Data", data);
-        data.items.map(files => getFileInfo(files.id))
+        let fileArr = [];
+        data.items.forEach(files => fileArr.push(getFileInfo(files.id)))
+        Promise.all(fileArr)
+        .then((res) => {
+          console.log("res", res)
+          handleSuccess(res)
+        })
       })
       .catch(err => console.log(err))
+      console.log("handleSuccess", childFiles);      
   }
 
-  const getFileInfo = (fileId) => {
-    gapi.client.drive.files.get({
+  const getFileInfo = async (fileId) => {
+    const response = await gapi.client.drive.files.get({
       'fileId': fileId,
       // 'alt': 'media'
-      // fields: 'webViewLink'
       fields: 'id, name, mimeType, modifiedTime, webViewLink, webContentLink, fullFileExtension, fileExtension',
     })
-    .then((response) => {
-      const resp = JSON.parse(response.body);
-      console.log('Print Response: ', response, resp);
+    const resp = JSON.parse(response.body);
+    return resp;
+      // .then((response) => {
+        // let filesArr = childFiles;
+        // filesArr.push(resp);
+        // console.log("childFiles", childFiles)
+        // setChildFiles(filesArr);
+        // handleSuccess(resp);
+        // uploadFileToS3(resp, resp.webViewLink, "qdox-training-pipeline", "google-drive-test/" + resp.name)
+      // });
+  }
+
+
+  const [allLinks, setAllLinks] = useState([]);
+  const [loader, setLoader] = useState(false);
+
+  AWS.config.region = "us-east-1"; // Region
+  AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+    IdentityPoolId: "us-east-1:9b9e38cd-3ae5-4c5a-9636-d247dc100b7b"
+  });
+
+  const uploadFileToS3 = (file, url, bucket, key) => {
+    return fetch(url, {
+      method: "GET",
+      mode: "cors",
+      cache: "no-cache",
+      credentials: "same-origin",
+      headers: {
+        // 'Content-Type': 'application/json',
+        // 'Access-Control-Allow-Origin': '*',
+        // 'Access-Control-Allow-Credentials': true,
+        // 'Access-Control-Allow-Headers' : 'Origin, Content-Type, Accept'
+      },
+      referrer: "no-referrer"
+    })
+      .then((x) => x.blob())
+      .then((response) => {
+        console.log("response >> ", response);
+        // const params = {
+        //   ContentType: response.type,
+        //   ContentLength: response.size.toString(), // or response.header["content-length"] if available for the type of file downloaded
+        //   Bucket: bucket,
+        //   Body: response,
+        //   Key: key
+        // };
+        // console.log("params >> ", params)
+        // const s3 = new AWS.S3();
+        // return s3.putObject(params).promise();
+      })
+      .catch((err) => {
+        console.log("error fetching file from url ", err);
+      });
+  };
+
+  function handleSuccess(files) {
+    console.log("files >> ", files);
+    let promiseArray = [];
+    let allLinks = [];
+    setLoader(true);
+    files.forEach((file) => {
+        allLinks.push(file);
+        promiseArray.push(
+          uploadFileToS3(
+            file,
+            file.webViewLink,
+            // file.webContentLink,
+            "qdox-training-pipeline",
+            "google-drive-test/" + file.name
+          )
+        );
     });
+
+    setAllLinks(allLinks);
+    Promise.all(promiseArray)
+      .then((res) => {
+        setLoader(false);
+        console.log("all the files uploaded successfully !!");
+      })
+      .catch((err) => {
+        setLoader(false);
+        console.log("some error in uploading files");
+      });
   }
 
   return (
