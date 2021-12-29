@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 
 import useDrivePicker from 'react-google-drive-picker'
 import { gapi } from 'gapi-script';
- 
+
 import { Row, Col, Spin, Select } from 'antd';
 import styled from 'styled-components';
 import GoogleDriveImage from '../../assets/images/google-drive.png';
 import ListDocuments from '../ListDocuments';
 import { style } from './styles';
 import { loadGoogleScript } from '../helper';
+import { getFileInfo } from 'prettier';
 
 const NewDocumentWrapper = styled.div`
   ${style}
@@ -40,7 +41,7 @@ const SCOPES = 'https://www.googleapis.com/auth/drive.install https://www.google
 //   const handleChange = (file) => {};
 
 //   const [openPicker, data] = useDrivePicker();  
-  
+
 //   useEffect(() => {
 //     if (Object.keys(signedInUser).length) {
 //       console.log('signedInUser', signedInUser);
@@ -48,44 +49,44 @@ const SCOPES = 'https://www.googleapis.com/auth/drive.install https://www.google
 //     }
 //   });
 
-//   useEffect(() => {
-//     // do anything with the selected/uploaded files
-//     console.log("authResponse");
-//     if(data){
-//       console.log(data)
-//       data.docs.map(folder => {
-//         console.log(folder);
-//         // fetchFiles(folder.id)
-//         listFiles(`parents=${folder.id}`);
-//       })
-//     }
-//   }, [data]);
+//   // useEffect(() => {
+//   //   // do anything with the selected/uploaded files
+//   //   console.log("authResponse");
+//   //   if(data){
+//   //     console.log(data)
+//   //     data.docs.map(folder => {
+//   //       console.log(folder);
+//   //       // fetchFiles(folder.id)
+//   //       listFiles(`parents=${folder.id}`);
+//   //     })
+//   //   }
+//   // }, [data]);
 
-//   useEffect(() => {
-//     // const folders = documents.filter((doc)=> doc.mimeType === "application/vnd.google-apps.folder")
-//     console.log("Folders", documents[0])
-//     if (documents.length) {
-//       gapi.client.drive.files
-//       .list({
-//         // pageSize: 10,
-//         fields: 'nextPageToken, files(id, name, mimeType, modifiedTime)',
-//         // q: `parents=${documents[0].id}`,
-//         q: `'${documents[0].id}' in parents`,
-//       })
-//       .then((response) => {
-//         const res = JSON.parse(response.body);
-//         console.log('Contents', res);
-//       })
-//       .catch((err) => console.log("err", err));
-//     }
-//   }, [documents])
+//   // useEffect(() => {
+//   //   // const folders = documents.filter((doc)=> doc.mimeType === "application/vnd.google-apps.folder")
+//   //   console.log("Folders", documents[0])
+//   //   if (documents.length) {
+//   //     gapi.client.drive.files
+//   //     .list({
+//   //       // pageSize: 10,
+//   //       fields: 'nextPageToken, files(id, name, mimeType, modifiedTime)',
+//   //       // q: `parents=${documents[0].id}`,
+//   //       q: `'${documents[0].id}' in parents`,
+//   //     })
+//   //     .then((response) => {
+//   //       const res = JSON.parse(response.body);
+//   //       console.log('Contents', res);
+//   //     })
+//   //     .catch((err) => console.log("err", err));
+//   //   }
+//   // }, [documents])
 
 //   const handleClientLoad = () => {
 //     // handleOpenPicker()
 //     gapi.load('client:auth2', initClient);
 //     // gapi.load('picker', onPickerApiLoad);
 //   };
-  
+
 //   const initClient = () => {
 //     setIsLoadingGoogleDriveApi(true);
 //     console.log('Initiating');
@@ -127,6 +128,7 @@ const SCOPES = 'https://www.googleapis.com/auth/drive.install https://www.google
 //       setSignedInUser(gapi.auth2.getAuthInstance().currentUser.le.wt);
 //       setIsLoadingGoogleDriveApi(false);
 //       listFiles();
+//       // retrieveAllFiles()
 //       // listFiles("mimeType=application/vnd.google-apps.folder");
 //       // handleOpenPicker();
 //     } else {
@@ -149,7 +151,7 @@ const SCOPES = 'https://www.googleapis.com/auth/drive.install https://www.google
 //   const onClose = () => {
 //     setListDocumentsVisibility(false);
 //   };
-  
+
 //   const listFiles = (searchTerm = "mimeType='application/vnd.google-apps.folder'"  ) => {
 //     setIsFetchingGoogleDriveFiles(true);
 //     gapi.client.drive.files
@@ -166,7 +168,26 @@ const SCOPES = 'https://www.googleapis.com/auth/drive.install https://www.google
 //         console.log('Files', res);
 //       })
 //   };
-  
+
+//   // function retrieveAllFiles(callback) {
+//   //   var retrievePageOfFiles = function(request, result) {
+//   //     request.execute(function(resp) {
+//   //       result = result.concat(resp.items);
+//   //       var nextPageToken = resp.nextPageToken;
+//   //       if (nextPageToken) {
+//   //         request = gapi.client.drive.files.list({
+//   //           'pageToken': nextPageToken
+//   //         });
+//   //         retrievePageOfFiles(request, result);
+//   //       } else {
+//   //         callback(result);
+//   //       }
+//   //     });
+//   //   }
+//   //   var initialRequest = gapi.client.drive.files.list();
+//   //   retrievePageOfFiles(initialRequest, []);
+//   // }
+
 //   const handleOpenPicker = () => {
 //     console.log("openning picker")
 //     openPicker({
@@ -219,7 +240,11 @@ const SCOPES = 'https://www.googleapis.com/auth/drive.install https://www.google
 // export default SelectSource;
 
 function App() {
-  const [openPicker, data, authResponse] = useDrivePicker();  
+  const [openPicker, data, authResponse] = useDrivePicker();
+  const [documents, setDocuments] = useState([]);
+  const [signedInUser, setSignedInUser] = useState({});
+  const [childFiles, setChildFiles] = useState([]);
+
   // const customViewsArray = [new google.picker.DocsView()]; // custom view
   const handleOpenPicker = () => {
     openPicker({
@@ -236,35 +261,121 @@ function App() {
       // customViews: customViewsArray, // custom view
     })
   }
- 
+
   useEffect(() => {
     // do anything with the selected/uploaded files
     console.log("authResponse", authResponse);
-    if(data){
+    if (data) {
       console.log(data)
       data.docs.map(folder => {
         console.log(folder);
         fetchFiles(folder.id)
       })
+      handleClientLoad()
     }
   }, [data]);
-  
+
+  const handleClientLoad = () => {
+    // handleOpenPicker()
+    gapi.load('client:auth2', initClient);
+    // gapi.load('picker', onPickerApiLoad);
+  };
+
+  const initClient = () => {
+    // setIsLoadingGoogleDriveApi(true);
+    gapi.client
+      .init({
+        apiKey: API_KEY,
+        clientId: CLIENT_ID,
+        discoveryDocs: DISCOVERY_DOCS,
+        scope: SCOPES,
+        // redirect_uri: ''
+      })
+      .then(
+        function () {
+          console.log('Fetching documents', gapi);
+          // Listen for sign-in state changes.
+          gapi.auth.setToken(authResponse.access_token)
+          gapi.auth2.getAuthInstance().isSignedIn.listen(updateSigninStatus);
+          // Handle the initial sign-in state.
+          updateSigninStatus(gapi.auth2.getAuthInstance().isSignedIn.get());
+        },
+        function (error) {
+          console.log('error', error);
+        }
+      )
+      .catch((err) => {
+        console.log('err', err);
+      });
+  };
+
+  const updateSigninStatus = (isSignedIn) => {
+    if (isSignedIn) {
+      // setOauthToken(gapi.auth.getToken().access_token)
+      setSignedInUser(gapi.auth2.getAuthInstance().currentUser.le.wt);
+      // listFiles();
+    } else {
+      // prompt user to sign in
+      handleAuthClick();
+    }
+  };
+
+  const handleAuthClick = (event) => {
+    gapi.auth2.getAuthInstance().signIn();
+  };
+
   const fetchFiles = (folderId) => {
     // fetch(`https://www.googleapis.com/drive/v3/files`, {
     //   q: `'${folderId}' in parents`,
     //   key: API_KEY
     // })
-    fetch(`https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents&key=${API_KEY}`,{})
-      .then((res)=> {
-        console.log(res);
+    // fetch(`https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents&key=${API_KEY}`,{})
+    fetch(`https://www.googleapis.com/drive/v2/files/${folderId}/children?key=${API_KEY}`, {
+      method: "GET",
+      mode: 'cors', // no-cors, *cors, same-origin
+      credentials: 'same-origin', // include, *same-origin, omit
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Credentials': true,
+        'Authorization': 'Bearer ' + authResponse.access_token,
+        'Accept': 'application/json'
+      },
+    })
+      .then(res => res.json())
+      .then(data => {
+        // console.log(childFiles.length)
+        // if (!childFiles.length) {
+        //   setChildFiles(data);  
+        // } else {
+        //   const filesArr = childFiles;
+        //   filesArr.push(data);
+        //   setChildFiles(filesArr);
+        // }
+        console.log("Data", data);
+        data.items.map(files => getFileInfo(files.id))
       })
-      .catch((err)=>console.log(err))
+      .catch(err => console.log(err))
   }
+
+  const getFileInfo = (fileId) => {
+    gapi.client.drive.files.get({
+      'fileId': fileId,
+      // 'alt': 'media'
+      // fields: 'webViewLink'
+      fields: 'id, name, mimeType, modifiedTime, webViewLink, webContentLink, fullFileExtension, fileExtension',
+    })
+    .then((response) => {
+      const resp = JSON.parse(response.body);
+      console.log('Print Response: ', response, resp);
+    });
+  }
+
   return (
     <div>
-        <button onClick={() => handleOpenPicker()}>Select Folders</button>
+      <button onClick={() => handleOpenPicker()}>Select Folders</button>
     </div>
   );
 }
- 
+
 export default App;
